@@ -1,0 +1,9 @@
+этого можно добиться, если включить профайлеро в xdebug
+Команды, которые нужно добавить в php.ini
+
+xdebug.profiler_enable = 1
+xdebug.profiler_aggregate = 1
+xdebug.profiler_append = 1
+xdebug.profiler_enable_trigger = 1
+xdebug.profiler_output_dir="path_to_dir"
+xdebug.profiler_output_name = "cachegrind.out.%H%R"
