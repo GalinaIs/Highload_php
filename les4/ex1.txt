@@ -1,0 +1,39 @@
+1.  vagrant init generic/centos7
+	vagrant up
+для того, чтобы поднять виртуальную машину с помощью docker контейнера
+2. Открываем виртуальную машну с помощью VirtualBox
+3. Разрешаем подключение через ssh при помощи пароля
+
+vi /etc/ssh/sshd_config (лично мне удобнее через nano - для этого я установила эту программу - sudo yum install nano)
+PasswordAuthentication yes
+service sshd restart
+
+4. Подключаемся к виртуальной машине через PuTTy
+5. Устанавливаем MariaDB
+	1. sudo nano /etc/yum.repos.d/Mariadb.repo
+	2.  # MariaDB 10.2 CentOS repository list - created 2017-12-26 06:22 UTC
+		# http://downloads.mariadb.org/mariadb/repositories/
+		[mariadb]
+		name = MariaDB
+		baseurl = http://yum.mariadb.org/10.2/centos7-amd64
+		gpgkey=https://yum.mariadb.org/RPM-GPG-KEY-MariaDB
+		gpgcheck=1
+		
+		Добавляем репозиторий для скачивания MariaDB
+		
+	3. sudo yum update
+	Обновляем список пакетов
+	4. sudo yum install MariaDB-server MariaDB-client
+	производим установку
+	
+6. sudo systemctl start mariadb 
+Запускаем MariaDB
+7. sudo mysql_secure_installation
+Задаем пароль root и другие настройки безопасности
+8. mysql -u root -p заходим в систему
+9. Настроим MySQL Workbench для входа на виртуальную машину (я это сделала через ssh соединение)
+
+Часть про портирование таблиц в БД
+1. Через интерфейс MySQL Workbench портировать таблицы - Server -> Data Import. Выбираем нужный файл и импортируем из него дамп базы 
+
+Повторяем п.1-9 для второй виртуальной машины
