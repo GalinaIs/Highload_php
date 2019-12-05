@@ -1,0 +1,28 @@
+1. Устанавливаем на виртуальную машину memchached
+	1. скачиваем memcached
+	sudo yum install memcached php72-php-pecl-memcached
+	2. перезапускаем php
+	sudo systemctl restart php72-php-fpm.service
+	3. запускаем memcached
+	sudo systemctl start memcached
+	4. проверяем, что все запустилось
+	sudo netstat -tap | grep memcached
+	 
+	tcp        0      0 0.0.0.0:memcache        0.0.0.0:*               LISTEN      1470/memcached
+	tcp6       0      0 [::]:memcache           [::]:*                  LISTEN      1470/memcached
+	
+	после рестарта сервера на странице с phpinfo появится раздел с информацией о memchached (см. memcached.jpg)
+	
+2. Устанавливаем на виртуальную машину Redis
+	1. скачаваем redis
+	sudo yum install redis php72-php-pecl-redi
+	2. перезапускаем php
+	sudo systemctl restart php72-php-fpm.service
+	3. запускаем redis
+	sudo systemctl start redis
+	4. проверяем, что все запустилось
+	sudo netstat -tap | grep redis
+	
+	tcp        0      0 localhost:6379          0.0.0.0:*               LISTEN      2069/redis-server 1
+
+	после рестарта сервера на странице с phpinfo появится раздел с информацией о memchached (см. redis.jpg)
