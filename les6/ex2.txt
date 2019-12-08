@@ -1,0 +1,7 @@
+Для того, чтобы реализовать хранение сессий в Memcached, необходимо в файле php.ini задать настройку
+
+session.save_handler = files
+
+заменить на
+
+session.save_handler = memcached

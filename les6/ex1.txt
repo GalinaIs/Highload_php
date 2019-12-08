@@ -1,0 +1,195 @@
+Машина номер 1
+1. Входим на машину, на которой уже настраивался сайт mysite.local
+2. В папке настроек nginx создадим новый файл upstream.conf
+ sudo nano /etc/nginx/conf.d/upstream.conf
+ 
+ внесем в него данные - строчку с server backend2.mysite.com:8080; закомментировала до настройки второй машины
+ 
+	upstream backend {
+	  server backend1.mysite.com:8080;
+	#  server backend2.mysite.com:8080;
+	}
+
+
+	server {
+	  listen 80;
+	  server_name mysite.local;
+
+	  location / {
+		proxy_pass  http://backend;
+		proxy_set_header Host $host;
+	  }
+	}
+
+3. В папке настроек nginx создадим новый файл backend1.mysite.conf
+ sudo nano /etc/nginx/conf.d/backend1.mysite.conf
+
+ внесем в него данные
+ 
+	server {
+		# указываем порт для соединения
+		listen 8080;
+		# нужно указать, какому доменному имени принадлежит наш конфиг
+		server_name backend1.mysite;
+
+		# задаем корневую директорию
+		root /var/www/mysite.local;
+
+		# стартовый файл — всегда index.php
+		index index.php;
+
+		add_header X-HOST "backend1.local" always;
+
+		# при обращении к статическим файлам логи не нужны, равно как и обращение к$
+		location ~* .(jpg|jpeg|gif|css|png|js|ico|html)$ {
+			access_log off;
+			expires max;
+		}
+
+4. Пропишем в файле /etc/hosts ip для backend1.mysite.com
+ sudo nano /etc/hosts
+ 
+ 127.0.0.1 backend1.mysite.com
+ 
+5. Перезапускаем nginx
+ sudo systemctl restart nginx
+ 
+6. Обращаемся к сайту и получаем хедер, прописанный для backend1.mysite, - X-HOST: backend1.local
+
+Машина номер 2
+1. Скачиваем nginx, nano и php
+ sudo yum install epel-release
+ sudo rpm -Uvh http://rpms.remirepo.net/enterprise/remi-release-7.rpm
+ sudo yum install nginx nano php72 php72-php-fpm
+
+делаем символическую ссылку
+ln -s /usr/bin/php72 /usr/bin/php
+ 
+2. внесем изменения в файл /etc/opt/remi/php72/php-fpm.d/www.conf
+	sudo nano/etc/opt/remi/php72/php-fpm.d/www.conf
+	
+	; сервер fpm будет работать от пользователя NGINX
+	user = NGINX
+	group = NGINX
+
+	; соединяться будет не по HTTP, а по сокету, что гораздо быстрее и надежнее
+	; запомним адрес файла сокета, он нам понадобится
+	listen = /var/run/php-fpm.sock
+
+	; уточним права на файл сокета во избежание проблем
+	listen.owner = nobody
+	listen.group = nobody
+	listen.mode = 0666
+
+3. разберемся с firewall
+
+отключаем firewall
+ sudo systemctl stop firewalld
+ 
+проверяем правила
+ sudo iptables -L
+ 
+	Chain INPUT (policy ACCEPT)
+	target     prot opt source               destination
+
+	Chain FORWARD (policy ACCEPT)
+	target     prot opt source               destination
+
+	Chain OUTPUT (policy ACCEPT)
+	target     prot opt source               destination
+
+убираем его из автозагрузки
+systemctl disable firewalld
+
+4. создаем директорию сайта
+ mkdir /var/www/mysite.local
+ 
+5. создадим файл с настройками сайта
+	sudo nano /etc/nginx/conf.d/mysite.local.conf
+	
+	внесем в него данные
+ 
+	server {
+		# указываем порт для соединения
+		listen 8080;
+		# нужно указать, какому доменному имени принадлежит наш конфиг
+		server_name backend2.mysite;
+
+		# задаем корневую директорию
+		root /var/www/mysite.local;
+
+		# стартовый файл — всегда index.php
+		index index.php;
+
+		# при обращении к статическим файлам логи не нужны, равно как и обращение к fpm
+		location ~* .(jpg|jpeg|gif|css|png|js|ico|html)$ {
+			access_log off;
+			expires max;
+		}
+
+		# помним про единую точку доступа
+		# все запросы заворачиваются в корневую директорию root на index.php
+		location / {
+			try_files $uri $uri/ /index.php?$query_string;
+		}
+
+		# и наконец правило обращения к php-fpm
+		location ~* .php$ {
+			try_files $uri = 404;
+			fastcgi_split_path_info ^(.+.php)(/.+)$;
+			fastcgi_pass unix:/var/run/php-fpm.sock;
+			fastcgi_index index.php;
+			fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+			include fastcgi_params;
+		}
+	}
+
+		
+6. изменим файл настроек nginx
+  sudo nano/etc/nginx/nginx.conf
+  убираем секцию сервер
+  
+7. проверяем конфигурацию сервера на ошибки
+ sudo nginx -t
+	nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+	nginx: configuration file /etc/nginx/nginx.conf test is successful
+
+8. создаем файл index.php
+sudo nano /var/www/mysite.local/index.php
+
+
+<?php
+phpinfo();
+
+9. перезапускаем nginx и php
+ sudo systemctl restart nginx
+ sudo systemctl restart php72-php-fpm.service
+ 
+10. получаем ip адрес
+ ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
+    link/ether 08:00:27:98:a2:83 brd ff:ff:ff:ff:ff:ff
+    inet 10.0.2.15/24 brd 10.0.2.255 scope global noprefixroute dynamic eth0
+       valid_lft 81528sec preferred_lft 81528sec
+3: eth1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
+    link/ether 08:00:27:36:bf:6b brd ff:ff:ff:ff:ff:ff
+    inet 10.0.2.5/24 brd 10.0.2.255 scope global noprefixroute dynamic eth1
+       valid_lft 1090sec preferred_lft 1090sec
+	   
+Возвращаемся на первую машину
+1. Пропишем в файле /etc/hosts ip для backend2.mysite.com
+ sudo nano /etc/hosts
+ 
+ 10.0.2.5 backend2.mysite.com
+ 
+2. В папке настроек nginx upstream.conf строчку с server backend2.mysite.com:8080 раскомментируем
+3. Перезапустим nginx
+
+Теперь когда обращаемся к сайту, получаем хедер, прописанный для backend1.mysite, - X-HOST: backend1.local или для backend2.mysite, - X-HOST: backend2.local
+
+
+ 
