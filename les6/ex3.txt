@@ -1,0 +1,31 @@
+1. Создаем новую директорию
+ sudo mkdir /var/www/site
+
+2. создаем символьную ссылку
+ ls /var/www/mysite.local /var/www/site
+
+3. меняем файл настроек backend1.mysite.conf
+ sudo nano /etc/nginx/conf.d/backend1.mysite.conf
+ 
+ root /var/www/mysite.local; меняем на root /var/www/site;
+ 
+4. проверяем конфигурацию сервера на ошибки
+ sudo nginx -t
+ 
+5. перезапускаем nginx
+ sudo systemctl restart nginx
+ 
+6. проверяем работу сайта и получаем 403 - Forbidden.
+
+7. sudo chown vagrant:nginx /var/www/site/
+sudo chmod 0775 /var/www/site/
+
+не помогло
+
+8. гуглим =)
+sudo setsebool -P httpd_can_network_connect on
+getenforce
+
+chcon -Rt httpd_sys_content_t /var/www/site/
+
+после этого все заработало
