@@ -1,0 +1,139 @@
+Установка Zabbix Server
+1. sudo rpm -ivh https://repo.zabbix.com/zabbix/4.0/rhel/7/x86_64/zabbix-release-4.0-1.el7.noarch.rpm
+2. sudo yum-config-manager --enable rhel-7-server-optional-rpms
+3. sudo yum install zabbix-server-mysql zabbix-web-mysql
+4. Создадим на сервере MySQL новую базу с именем zabbix, а также пользователя zabbix@localhost с полными правами на БД zabbix и зададим ему пароль
+	sudo systemctl start mariadb
+	mysql -u root -p
+	вводим пароль
+	CREATE USER 'zabbix'@'localhost' IDENTIFIED BY 'zabbix';
+	CREATE DATABASE zabbix;
+	GRANT ALL PRIVILEGES ON zabbix . * TO 'zabbix'@'localhost';
+	quit;
+5. развернем дамп
+	zcat /usr/share/doc/zabbix-server-mysql*/create.sql.gz | mysql -uzabbix -p zabbix
+6. настроим конфигурацию zabbix server
+ sudo nano /etc/zabbix/zabbix_server.conf
+ 
+ приведем в соответствие с 
+ 
+ DBHost=localhost
+ DBName=zabbix
+ DBUser=zabbix
+ DBPassword=zabbix
+ 
+7. создам файл конфигурации zabbix.conf
+ sudo nano /etc/nginx/conf.d/zabbix.conf
+ 
+ и внесем в него данные
+ 
+ server {
+	listen 8082;
+	root /usr/share/zabbix;
+	access_log /var/log/nginx/zabbix.access.log;
+	server_name zabbix.local;
+	location / {
+			index index.php index.html index.htm;
+	}
+	location ~ \.php$ {
+			fastcgi_pass unix:/var/opt/remi/php72/run/php-fpm.sock;
+			fastcgi_index index.php;
+			fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+			include fastcgi_params;
+			fastcgi_param PHP_VALUE "
+			max_execution_time = 300
+			memory_limit = 128M
+			post_max_size = 16M
+			upload_max_filesize = 2M
+			max_input_time = 300
+			date.timezone = Europe/Moscow
+			always_populate_raw_post_data = -1";
+			fastcgi_buffers 8 256k;
+			fastcgi_buffer_size 128k;
+			fastcgi_intercept_errors on;
+			fastcgi_busy_buffers_size 256k;
+			fastcgi_temp_file_write_size 256k;
+	}
+ }
+
+8. сменим права на файлы логов и логики zabbix
+ sudo chown -R nginx /etc/zabbix/web
+ sudo chown -R nginx /usr/share/zabbix
+
+9. перезапустим nginx
+ sudo systemctl restart nginx
+
+10. настроим проброс портов с локальной машины на виртуальную
+11. обратимся с локальной машины по адресу localhost:8080 - получаем ошибку 500
+12. смотрим ошибку
+
+sudo nano /var/log/nginx/error.log
+
+2019/12/14 12:40:47 [error] 5185#0: *1 FastCGI sent in stderr: "Passing INI directive through FastCGI: unable to set 'always_populate_raw_post_data'
+PHP message: PHP Fatal error:  Uncaught Exception: Cannot start session. in /usr/share/zabbix/include/classes/core/CSession.php:46
+Stack trace:
+#0 /usr/share/zabbix/setup.php(60): CSession::start()
+#1 {main}
+  thrown in /usr/share/zabbix/include/classes/core/CSession.php on line 46" while reading response header from upstream, client: 10.0.2.2, server: zabbix.local, request: "GET /setup.php HTTP/1.1$
+
+13. гуглим - проверяем в php.ini параметр
+php_value[session.save_path]    = /var/opt/remi/php72/lib/php/session
+
+и устанавливаем полные права
+sudo chmod 770 /var/opt/remi/php72/lib/php/session
+sudo chown :nginx /var/opt/remi/php72/lib/php/session
+
+перезагружаем php и nginx
+14. пробуем загрузить еще раз страницу - все ОК
+15. получаем ошибку в вэб-интерфейсе - error.jpg
+16. устанавливаем дополнения
+ sudo yum install php72-php-gd
+ sudo yum install php72-php-xml
+ sudo systemctl restart php72-php-fpm.service
+ sudo systemctl restart nginx
+
+теперь ошибки в вэб-интерфейсе пропали
+16. вводим пароль для созданного пользователя
+Подключаемся и заходим
+Видим ошибку Zabbix agent on Zabbix server is unreachable for 5 minutes
+17. устанавливаем zabbix agent
+ sudo yum install zabbix-agent
+ sudo systemctl start zabbix-agent
+ 
+через минуту ошибка пропала
+ 
+ 
+Добавить шаблон мониторинга HTTP-соединений
+Работаем через вэб-морду zabbix
+1. Configuration -> Templates и создаем новый шаблон.
+Вводим имя шаблона
+Site monitoring
+Выбираем группу и нажимаем добавить
+
+2. Открываем созданный шаблон, идем на вкладку Web Scenarios и добавляем новый сценарий для мониторинга сайта.
+Вводим имя mysite.ru и новое приложение Monitoring site
+После этого переходим на вкладку Steps и добавляем шаг проверки.
+
+name index
+URL http://mysite.ru
+Required status codes 200
+
+добавляем шаг проверки и сам сценарий
+
+3. Нужно прикрепить этот шаблон к какому-нибудь хосту, чтобы начались реальные проверки. Например, к самому zabbix серверу. 
+Configuration -> Hosts, выбираем Zabbix Server и прикрепляем к нему созданный ранее шаблон - нажимаем update и выбираем по имени созданный шаблон.
+
+Теперь в разделе Monitoring -> Web можно посмотреть результаты мониторинга сайта mysite.ru.
+
+
+Настроить мониторинг созданных в рамках курса виртуальных машин
+1. Configuration -> Hosts -> Create host
+2. Вводим данные другой виртуальной машины
+Host Name Virtual Box 1
+IP address 10.0.2.5
+Выбираем group
+На вкладке template можно выбрать те шаблоны, которые хотим добавить к новому хосту
+Вставим галочку enabled
+И добавляем
+
+
